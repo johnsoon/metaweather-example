@@ -1,29 +1,39 @@
 defmodule MetaweatherProject do
+  @city_list [["Salt Lake City", 2487610], ["Los Angeles", 2442047], ["Boise", 2366355]]
   @moduledoc """
   This is the MetawaetherProject module.
   This will make asynchronous calls to
   metaweather to get the forcasts for Salt Lake City, Los Angeles, and Boise.
-  It will then take todays forcast and the next five days max temps and average them.
+  It will then take todays forecast and the next five days max temps and average them.
+  The module attribute @city_list is an example of city name and location ids for this given project.
+  The list could be expanded as needed to accomidate for more locations.
   """
 
   @doc """
-  This is the main function that creates the tasks and makes the function calls with the location ids.
-  Call this to run the example
+  This is the main function calls create_tasks then executes the tasks asychronously.
   """
   def main do
-    task1 = Task.async(fn -> IO.puts("Salt Lake City Average Max Temp: #{get_max_temps_average(2487610)}") end)
-    task2 = Task.async(fn -> IO.puts("Los Angeles Average Max Temp: #{get_max_temps_average(2442047)}") end)
-    task3 = Task.async(fn -> IO.puts("Boise Average Max Temp: #{get_max_temps_average(2366355)}") end)
-    Task.await_many([task1, task2, task3])
+    create_tasks(@city_list)
+    |> Enum.to_list()
+  end
+
+  @doc """
+  This function takes in a list of City names and their metaweather location ids
+  and creates tasks that call get_max_temps_average to make the api call and find the average
+  and prints in the proper format.
+  """
+  def create_tasks(list) when is_list(list) do
+    Task.async_stream(list,
+     fn(sub_list) ->
+      [city_name, location_id] = sub_list
+      IO.puts("#{city_name} Average Max Temp: #{get_max_temps_average(location_id)}") end)
   end
 
   @doc """
   This is a simple average function that takes in a list and sums the contents and divides by the count.
   """
-  def average(list) do
-    list_total = Enum.count(list)
-    sum_val = Enum.reduce(list, fn(n, sum) -> n + sum end)
-    sum_val / list_total
+  def average(list) when is_list(list) do
+    Enum.sum(list) / Enum.count(list)
   end
 
   @doc """
@@ -31,7 +41,14 @@ defmodule MetaweatherProject do
   """
   def get_weather_request(location_id) do
     HTTPoison.start
-    HTTPoison.get!("https://www.metaweather.com/api/location/#{location_id}/").body
+    case HTTPoison.get("https://www.metaweather.com/api/location/#{location_id}/") do
+      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
+        body
+      {:ok, %HTTPoison.Response{status_code: 404}} ->
+        IO.puts "Resource not found!"
+      {:error, %HTTPoison.Error{reason: reason}} ->
+        IO.inspect reason
+    end
   end
 
   @doc """
@@ -40,11 +57,12 @@ defmodule MetaweatherProject do
   Then we call the average function based on that list and rounds it to 2 decimal places
   """
   def get_max_temps_average(location_id) do
-    response = get_weather_request(location_id)
-    json = Jason.decode!(response)
-    weather = Map.get(json, "consolidated_weather")
-    max_temps = Enum.map(weather, fn(x) -> Map.get(x, "max_temp") end)
-    Decimal.from_float(average(max_temps))
+    get_weather_request(location_id)
+    |> Jason.decode!()
+    |> Map.get("consolidated_weather")
+    |> Enum.map(fn(x) -> Map.get(x, "max_temp") end)
+    |> average()
+    |> Decimal.from_float()
     |> Decimal.round(2)
   end
 end
