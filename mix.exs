@@ -23,7 +23,8 @@ defmodule MetaweatherProject.MixProject do
     [
       {:decimal, "~> 2.0"},
       {:httpoison, "~> 1.8"},
-      {:jason, "~> 1.2"}
+      {:jason, "~> 1.2"},
+      {:mock, "~> 0.3.0", only: :test}
     ]
   end
 end
